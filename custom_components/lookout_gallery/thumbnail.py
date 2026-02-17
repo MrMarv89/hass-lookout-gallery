@@ -182,14 +182,19 @@ class ThumbnailGenerator:
             _, stderr = await asyncio.wait_for(process.communicate(), timeout=30)
 
             if process.returncode != 0:
-                _LOGGER.warning("ffmpeg failed for %s: %s", video_path, stderr.decode() if stderr else "Unknown error")
+                # Only log as debug for corrupt files (moov atom not found is common)
+                error_msg = stderr.decode() if stderr else "Unknown error"
+                if "moov atom not found" in error_msg or "Invalid data found" in error_msg:
+                    _LOGGER.debug("Skipping corrupt video %s", video_path)
+                else:
+                    _LOGGER.warning("ffmpeg failed for %s: %s", video_path, error_msg)
                 return False
 
             _LOGGER.debug("Generated thumbnail for: %s", video_path)
             return True
 
         except asyncio.TimeoutError:
-            _LOGGER.warning("Thumbnail generation timed out for: %s", video_path)
+            _LOGGER.debug("Thumbnail generation timed out for: %s", video_path)
             return False
         except Exception as ex:
             _LOGGER.error("Error generating thumbnail for %s: %s", video_path, ex)
@@ -243,41 +248,60 @@ class ThumbnailGenerator:
                 _LOGGER.warning("Media path does not exist: %s", base_path)
                 continue
 
-            for root, _, files in os.walk(base_path):
-                if self.thumbnail_folder in root:
+            # Use executor to avoid blocking the event loop
+            file_list = await self.hass.async_add_executor_job(
+                self._scan_directory, base_path
+            )
+
+            for file_path, ext in file_list:
+                stats["scanned"] += 1
+                thumb_path = self._get_thumbnail_path(file_path)
+
+                # Check if thumbnail exists (in executor)
+                thumb_exists = await self.hass.async_add_executor_job(
+                    self._check_thumbnail_exists, file_path, thumb_path
+                )
+                
+                if thumb_exists:
+                    stats["skipped"] += 1
                     continue
 
-                for filename in files:
-                    file_path = os.path.join(root, filename)
-                    ext = Path(filename).suffix.lower()
+                if ext in VIDEO_EXTENSIONS:
+                    success = await self._generate_video_thumbnail(file_path, thumb_path)
+                else:
+                    success = await self._generate_image_thumbnail(file_path, thumb_path)
 
-                    if ext not in VIDEO_EXTENSIONS and ext not in IMAGE_EXTENSIONS:
-                        continue
+                if success:
+                    stats["generated"] += 1
+                else:
+                    stats["failed"] += 1
 
-                    stats["scanned"] += 1
-                    thumb_path = self._get_thumbnail_path(file_path)
-
-                    if thumb_path.exists():
-                        if thumb_path.stat().st_mtime >= Path(file_path).stat().st_mtime:
-                            stats["skipped"] += 1
-                            continue
-
-                    if ext in VIDEO_EXTENSIONS:
-                        success = await self._generate_video_thumbnail(file_path, thumb_path)
-                    else:
-                        success = await self._generate_image_thumbnail(file_path, thumb_path)
-
-                    if success:
-                        stats["generated"] += 1
-                    else:
-                        stats["failed"] += 1
-
-                    await asyncio.sleep(0)
+                # Yield control
+                await asyncio.sleep(0)
 
         _LOGGER.info("Thumbnail generation: %d scanned, %d generated, %d skipped, %d failed",
                      stats["scanned"], stats["generated"], stats["skipped"], stats["failed"])
 
         return stats
+
+    def _scan_directory(self, base_path: str) -> list[tuple[str, str]]:
+        """Scan directory for media files (runs in executor)."""
+        file_list = []
+        for root, _, files in os.walk(base_path):
+            if self.thumbnail_folder in root:
+                continue
+            for filename in files:
+                ext = Path(filename).suffix.lower()
+                if ext in VIDEO_EXTENSIONS or ext in IMAGE_EXTENSIONS:
+                    file_list.append((os.path.join(root, filename), ext))
+        return file_list
+
+    def _check_thumbnail_exists(self, file_path: str, thumb_path: Path) -> bool:
+        """Check if thumbnail exists and is up to date (runs in executor)."""
+        if thumb_path.exists():
+            if thumb_path.stat().st_mtime >= Path(file_path).stat().st_mtime:
+                return True
+        return False
 
     def clear_cache(self) -> None:
         """Clear the in-memory cache."""

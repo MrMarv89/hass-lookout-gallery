@@ -103,15 +103,11 @@ class LookoutGalleryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> LookoutGalleryOptionsFlow:
         """Get the options flow for this handler."""
-        return LookoutGalleryOptionsFlow(config_entry)
+        return LookoutGalleryOptionsFlow()
 
 
 class LookoutGalleryOptionsFlow(config_entries.OptionsFlow):
     """Handle options flow for Lookout Gallery."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Manage the options."""
