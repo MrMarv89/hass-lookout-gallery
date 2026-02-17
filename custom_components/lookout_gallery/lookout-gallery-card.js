@@ -800,6 +800,16 @@ class LookoutGalleryCard extends LitElement {
     // v1.2.3: Handle tab visibility changes
     this._visibilityHandler = this._handleVisibilityChange.bind(this);
     document.addEventListener('visibilitychange', this._visibilityHandler);
+    
+    // Trigger queue check when reconnected (e.g., switching dashboards)
+    if (this._initLoaded && this.hass) {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        this._planQueueCheck();
+        // Also restore blob URLs in case they were invalidated
+        this._restoreBlobUrls();
+      }, 100);
+    }
   }
 
   disconnectedCallback() {
