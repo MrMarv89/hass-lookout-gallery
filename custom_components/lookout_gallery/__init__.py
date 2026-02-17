@@ -64,21 +64,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Get version for cache busting
     version = await hass.async_add_executor_job(get_version, hass)
 
-    # Register the frontend JavaScript file
-    await hass.http.async_register_static_paths(
-        [
-            StaticPathConfig(
-                FRONTEND_SCRIPT_URL,
-                hass.config.path("custom_components/lookout_gallery/lookout-gallery-card.js"),
-                True,  # cache_headers
+    # Register the frontend JavaScript file (only once)
+    if "frontend_loaded" not in hass.data[DOMAIN]:
+        try:
+            await hass.http.async_register_static_paths(
+                [
+                    StaticPathConfig(
+                        FRONTEND_SCRIPT_URL,
+                        hass.config.path("custom_components/lookout_gallery/lookout-gallery-card.js"),
+                        True,  # cache_headers
+                    )
+                ]
             )
-        ]
-    )
-    
-    # Add as extra JS so it loads automatically
-    add_extra_js_url(hass, f"{FRONTEND_SCRIPT_URL}?v={version}")
-    
-    _LOGGER.info("Lookout Gallery card registered at %s", FRONTEND_SCRIPT_URL)
+            # Add as extra JS so it loads automatically
+            add_extra_js_url(hass, f"{FRONTEND_SCRIPT_URL}?v={version}")
+            hass.data[DOMAIN]["frontend_loaded"] = True
+            _LOGGER.info("Lookout Gallery card registered at %s", FRONTEND_SCRIPT_URL)
+        except RuntimeError:
+            # Already registered (e.g., after reload)
+            _LOGGER.debug("Lookout Gallery card already registered")
 
     # Get configuration
     config_data = {**entry.data, **entry.options}
