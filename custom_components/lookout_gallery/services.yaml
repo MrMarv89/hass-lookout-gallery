@@ -1,0 +1,15 @@
+generate_thumbnails:
+  name: Generate Thumbnails
+  description: Generate thumbnails for all media files in configured paths.
+  fields:
+    path:
+      name: Path
+      description: Optional specific path to scan. If not provided, all configured paths are scanned.
+      example: "/media/cameras"
+      required: false
+      selector:
+        text:
+
+clear_cache:
+  name: Clear Cache
+  description: Clear the in-memory thumbnail cache.

@@ -841,24 +841,28 @@ class LookoutGalleryCard extends LitElement {
     if (!this._mediaEvents?.children) return;
     
     let restored = 0;
+    let needsRefetch = [];
     
     for (const item of this._mediaEvents.children) {
       const sourceItem = this._itemMap.get(item.media_content_id);
       if (!sourceItem) continue;
       
-      // Skip if not checked or broken
-      if (!sourceItem.checked || sourceItem.is_broken) continue;
+      // Skip if broken
+      if (sourceItem.is_broken) continue;
       
-      // Check if blob URL is still valid by checking if it exists
+      // Skip folders
+      if (item.can_expand) continue;
+      
+      // Check if blob URL is still valid
       if (sourceItem.thumbnail_blob_url) {
-        // Test if the blob URL is still valid
         const isValid = await this._isBlobUrlValid(sourceItem.thumbnail_blob_url);
         if (isValid) continue;
         
-        // Blob URL is invalid, need to restore from cache
+        // Blob URL is invalid, need to restore
         console.log("[LookoutGallery] Restoring thumbnail for:", item.media_content_id);
         
         try {
+          // Try IndexedDB cache first
           const cached = await LookoutDB.get(item.media_content_id);
           if (cached?.blob) {
             // Revoke old URL
@@ -870,9 +874,43 @@ class LookoutGalleryCard extends LitElement {
             this._trackBlobUrl(item.media_content_id, blobUrl);
             sourceItem.thumbnail_blob_url = blobUrl;
             restored++;
+          } else {
+            // No cache, need to refetch from server
+            needsRefetch.push(item);
           }
         } catch (e) {
           console.warn("[LookoutGallery] Failed to restore thumbnail:", e);
+          needsRefetch.push(item);
+        }
+      } else if (sourceItem.checked && !sourceItem.is_broken) {
+        // Was checked but has no URL - needs refetch
+        needsRefetch.push(item);
+      }
+    }
+    
+    // Refetch missing thumbnails from server
+    if (needsRefetch.length > 0 && this._serverThumbnailsAvailable) {
+      console.log(`[LookoutGallery] Refetching ${needsRefetch.length} thumbnails from server`);
+      for (const item of needsRefetch) {
+        const sourceItem = this._itemMap.get(item.media_content_id);
+        if (!sourceItem) continue;
+        
+        try {
+          const serverThumbUrl = await this._getServerThumbnail(item.media_content_id);
+          if (serverThumbUrl) {
+            this._trackBlobUrl(item.media_content_id, serverThumbUrl);
+            sourceItem.thumbnail_blob_url = serverThumbUrl;
+            restored++;
+            
+            // Cache for next time
+            try {
+              const response = await fetch(serverThumbUrl);
+              const blob = await response.blob();
+              await LookoutDB.put(item.media_content_id, blob, false);
+            } catch (e) { /* ignore cache errors */ }
+          }
+        } catch (e) {
+          console.warn("[LookoutGallery] Failed to refetch thumbnail:", e);
         }
       }
     }
