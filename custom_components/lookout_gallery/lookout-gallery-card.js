@@ -333,6 +333,7 @@ class LookoutGalleryCard extends LitElement {
   
   // Shared cache across instances
   static _internalCache = new Map();
+  static _activeBlobUrls = new Map(); // Static: persists across card instances
 
   static get properties() {
     return {
@@ -730,9 +731,6 @@ class LookoutGalleryCard extends LitElement {
     this._queueList = [];
     this._lastInteraction = 0;
     
-    // Blob URL tracking for cleanup
-    this._activeBlobUrls = new Map(); // contentId -> blobUrl
-    
     // Item lookup map for O(1) access
     this._itemMap = new Map(); // contentId -> item
     
@@ -857,7 +855,7 @@ class LookoutGalleryCard extends LitElement {
       if (!sourceItem) continue;
       
       // Check if we have a stored blob URL
-      const storedUrl = this._activeBlobUrls.get(item.media_content_id);
+      const storedUrl = LookoutGalleryCard._activeBlobUrls.get(item.media_content_id);
       if (storedUrl && !sourceItem.thumbnail_blob_url) {
         sourceItem.thumbnail_blob_url = storedUrl;
         reconnected++;
@@ -901,7 +899,7 @@ class LookoutGalleryCard extends LitElement {
           if (cached?.blob) {
             // Revoke old URL
             URL.revokeObjectURL(sourceItem.thumbnail_blob_url);
-            this._activeBlobUrls.delete(item.media_content_id);
+            LookoutGalleryCard._activeBlobUrls.delete(item.media_content_id);
             
             // Create new blob URL
             const blobUrl = URL.createObjectURL(cached.blob);
@@ -1029,10 +1027,10 @@ class LookoutGalleryCard extends LitElement {
 
   _cleanup() {
     // Revoke all active Blob URLs to prevent memory leaks
-    for (const [contentId, blobUrl] of this._activeBlobUrls) {
+    for (const [contentId, blobUrl] of LookoutGalleryCard._activeBlobUrls) {
       URL.revokeObjectURL(blobUrl);
     }
-    this._activeBlobUrls.clear();
+    LookoutGalleryCard._activeBlobUrls.clear();
     
     // Clear processing state
     this._processingSet.clear();
@@ -1120,7 +1118,7 @@ class LookoutGalleryCard extends LitElement {
       // Restore blob URLs to cached items before setting
       if (cached.children) {
         for (const item of cached.children) {
-          const cachedBlobUrl = this._activeBlobUrls.get(item.media_content_id);
+          const cachedBlobUrl = LookoutGalleryCard._activeBlobUrls.get(item.media_content_id);
           if (cachedBlobUrl) {
             item.thumbnail_blob_url = cachedBlobUrl;
             item.checked = true;
@@ -1200,7 +1198,7 @@ class LookoutGalleryCard extends LitElement {
       this._itemMap.set(item.media_content_id, item);
       
       // Restore blob URL if we have one cached
-      const cachedBlobUrl = this._activeBlobUrls.get(item.media_content_id);
+      const cachedBlobUrl = LookoutGalleryCard._activeBlobUrls.get(item.media_content_id);
       if (cachedBlobUrl) {
         item.thumbnail_blob_url = cachedBlobUrl;
         item.checked = true;
@@ -1604,13 +1602,13 @@ class LookoutGalleryCard extends LitElement {
 
   _trackBlobUrl(contentId, blobUrl) {
     // Revoke old URL if exists
-    const oldUrl = this._activeBlobUrls.get(contentId);
+    const oldUrl = LookoutGalleryCard._activeBlobUrls.get(contentId);
     if (oldUrl) {
       URL.revokeObjectURL(oldUrl);
     }
     
     // Track new URL
-    this._activeBlobUrls.set(contentId, blobUrl);
+    LookoutGalleryCard._activeBlobUrls.set(contentId, blobUrl);
   }
 
   _handleItemClick(item) {
