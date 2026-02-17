@@ -1116,6 +1116,18 @@ class LookoutGalleryCard extends LitElement {
     // Check cache first (unless forced refresh)
     if (!forceRefresh && !contentId && LookoutGalleryCard._internalCache.has(path)) {
       const cached = LookoutGalleryCard._internalCache.get(path);
+      
+      // Restore blob URLs to cached items before setting
+      if (cached.children) {
+        for (const item of cached.children) {
+          const cachedBlobUrl = this._activeBlobUrls.get(item.media_content_id);
+          if (cachedBlobUrl) {
+            item.thumbnail_blob_url = cachedBlobUrl;
+            item.checked = true;
+          }
+        }
+      }
+      
       this._setMediaEvents(cached);
       return;
     }
