@@ -1,0 +1,44 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Lookout Gallery Setup",
+        "description": "Configure the Lookout Gallery thumbnail generator for your camera recordings.",
+        "data": {
+          "media_paths": "Media Paths (comma-separated)",
+          "thumbnail_width": "Thumbnail Width (px)",
+          "thumbnail_height": "Thumbnail Height (px)",
+          "thumbnail_quality": "JPEG Quality (%)",
+          "frame_position": "Video Frame Position (seconds)",
+          "thumbnail_folder": "Thumbnail Folder Name",
+          "auto_generate": "Auto-generate thumbnails on startup"
+        }
+      }
+    },
+    "error": {
+      "no_valid_paths": "No valid media paths found. Please check that the paths exist."
+    },
+    "abort": {
+      "already_configured": "Lookout Gallery is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Lookout Gallery Options",
+        "data": {
+          "media_paths": "Media Paths (comma-separated)",
+          "thumbnail_width": "Thumbnail Width (px)",
+          "thumbnail_height": "Thumbnail Height (px)",
+          "thumbnail_quality": "JPEG Quality (%)",
+          "frame_position": "Video Frame Position (seconds)",
+          "thumbnail_folder": "Thumbnail Folder Name",
+          "auto_generate": "Auto-generate thumbnails on startup"
+        }
+      }
+    },
+    "error": {
+      "no_valid_paths": "No valid media paths found. Please check that the paths exist."
+    }
+  }
+}

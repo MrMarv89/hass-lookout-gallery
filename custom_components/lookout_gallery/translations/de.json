@@ -1,0 +1,44 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Lookout Gallery Einrichtung",
+        "description": "Konfiguriere den Lookout Gallery Thumbnail-Generator für deine Kamera-Aufnahmen.",
+        "data": {
+          "media_paths": "Medienpfade (kommagetrennt)",
+          "thumbnail_width": "Thumbnail Breite (px)",
+          "thumbnail_height": "Thumbnail Höhe (px)",
+          "thumbnail_quality": "JPEG Qualität (%)",
+          "frame_position": "Video Frame Position (Sekunden)",
+          "thumbnail_folder": "Thumbnail Ordnername",
+          "auto_generate": "Thumbnails beim Start automatisch generieren"
+        }
+      }
+    },
+    "error": {
+      "no_valid_paths": "Keine gültigen Medienpfade gefunden. Bitte überprüfe, ob die Pfade existieren."
+    },
+    "abort": {
+      "already_configured": "Lookout Gallery ist bereits konfiguriert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Lookout Gallery Optionen",
+        "data": {
+          "media_paths": "Medienpfade (kommagetrennt)",
+          "thumbnail_width": "Thumbnail Breite (px)",
+          "thumbnail_height": "Thumbnail Höhe (px)",
+          "thumbnail_quality": "JPEG Qualität (%)",
+          "frame_position": "Video Frame Position (Sekunden)",
+          "thumbnail_folder": "Thumbnail Ordnername",
+          "auto_generate": "Thumbnails beim Start automatisch generieren"
+        }
+      }
+    },
+    "error": {
+      "no_valid_paths": "Keine gültigen Medienpfade gefunden. Bitte überprüfe, ob die Pfade existieren."
+    }
+  }
+}
