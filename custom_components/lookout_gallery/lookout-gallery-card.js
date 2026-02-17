@@ -778,11 +778,13 @@ class LookoutGalleryCard extends LitElement {
       show_hidden_count: true,
       ui_language: "en",
       mobile_low_resource: false,
+      use_server_thumbnails: true,  // Use server-side thumbnail generation
       ...config
     };
     
     this._currentLimit = parseInt(this.config.maximum_files) || 5;
     this._currentSort = this.config.reverse_sort ? 'desc' : 'asc';
+    this._serverThumbnailsAvailable = null; // Will be checked on first load
   }
 
   get t() {
@@ -796,6 +798,9 @@ class LookoutGalleryCard extends LitElement {
     
     // Run cache cleanup on connect
     LookoutDB.cleanupOldEntries();
+    
+    // Check if server thumbnails are available
+    this._checkServerThumbnails();
     
     // v1.2.3: Handle tab visibility changes
     this._visibilityHandler = this._handleVisibilityChange.bind(this);
@@ -890,6 +895,66 @@ class LookoutGalleryCard extends LitElement {
     });
   }
 
+  // Check if Lookout Gallery integration is available for server thumbnails
+  async _checkServerThumbnails() {
+    if (!this.config.use_server_thumbnails) {
+      this._serverThumbnailsAvailable = false;
+      console.log("[LookoutGallery] Server thumbnails disabled in config");
+      return;
+    }
+
+    if (!this.hass) {
+      // Will retry when hass is available
+      return;
+    }
+
+    try {
+      const result = await this.hass.callWS({
+        type: "lookout_gallery/get_config"
+      });
+      
+      this._serverThumbnailsAvailable = result.configured && result.ffmpeg_available;
+      
+      if (this._serverThumbnailsAvailable) {
+        console.log("[LookoutGallery] Server thumbnails available (ffmpeg ready)");
+      } else if (result.configured && !result.ffmpeg_available) {
+        console.warn("[LookoutGallery] Integration configured but ffmpeg not available");
+        this._serverThumbnailsAvailable = false;
+      } else {
+        console.log("[LookoutGallery] Server thumbnails not available, using browser fallback");
+      }
+    } catch (e) {
+      // Integration not installed
+      this._serverThumbnailsAvailable = false;
+      console.log("[LookoutGallery] Lookout Gallery integration not installed, using browser fallback");
+    }
+  }
+
+  // Get thumbnail from server
+  async _getServerThumbnail(contentId) {
+    try {
+      const result = await this.hass.callWS({
+        type: "lookout_gallery/get_thumbnail",
+        media_content_id: contentId
+      });
+      
+      if (result.success && result.thumbnail) {
+        // Convert base64 to blob URL
+        const binary = atob(result.thumbnail);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: result.content_type || 'image/jpeg' });
+        return URL.createObjectURL(blob);
+      }
+      return null;
+    } catch (e) {
+      console.debug("[LookoutGallery] Failed to get server thumbnail:", e);
+      return null;
+    }
+  }
+
   _cleanup() {
     // Revoke all active Blob URLs to prevent memory leaks
     for (const [contentId, blobUrl] of this._activeBlobUrls) {
@@ -934,6 +999,10 @@ class LookoutGalleryCard extends LitElement {
   updated(changedProps) {
     if (changedProps.has('hass') && !this._initLoaded && this.hass) {
       this._initLoaded = true;
+      // Check server thumbnails when hass first becomes available
+      if (this._serverThumbnailsAvailable === null) {
+        this._checkServerThumbnails();
+      }
       this._loadMedia();
     }
     
@@ -1360,7 +1429,31 @@ class LookoutGalleryCard extends LitElement {
         }
       }
 
-      // 2. Resolve media URL
+      // 2. Try server thumbnail first if available
+      if (this._serverThumbnailsAvailable) {
+        const serverThumbUrl = await this._getServerThumbnail(contentId);
+        if (serverThumbUrl) {
+          this._trackBlobUrl(contentId, serverThumbUrl);
+          sourceItem.thumbnail_blob_url = serverThumbUrl;
+          sourceItem.checked = true;
+          sourceItem.is_broken = false;
+          
+          // Also cache in IndexedDB for offline use
+          try {
+            const response = await fetch(serverThumbUrl);
+            const blob = await response.blob();
+            await LookoutDB.put(contentId, blob, false);
+          } catch (e) {
+            // Caching failed, but thumbnail still works
+          }
+          
+          this.requestUpdate();
+          this._finishWorker(contentId);
+          return;
+        }
+      }
+
+      // 3. Resolve media URL (fallback to browser-side generation)
       const source = await this.hass.callWS({ 
         type: "media_source/resolve_media", 
         media_content_id: contentId 
@@ -1368,7 +1461,7 @@ class LookoutGalleryCard extends LitElement {
       
       sourceItem.resolved_url = source.url;
 
-      // 3. Validate and generate thumbnail
+      // 4. Validate and generate thumbnail (browser-side fallback)
       let result;
       if (item.media_class === 'video') {
         result = await this._checkVideoValidity(source.url, threshold);
@@ -1376,7 +1469,7 @@ class LookoutGalleryCard extends LitElement {
         result = await this._checkImageDarkness(source.url, threshold);
       }
 
-      // 4. Save to IndexedDB - v1.2.1: Now includes isBroken status!
+      // 5. Save to IndexedDB - v1.2.1: Now includes isBroken status!
       if (result.isBad && this.config.filter_broken) {
         sourceItem.is_broken = true;
         // Save broken status to cache (no blob, but isBroken=true)
