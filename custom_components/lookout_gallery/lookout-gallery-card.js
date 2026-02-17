@@ -794,6 +794,7 @@ class LookoutGalleryCard extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    
     this._startAutoRefresh();
     
     // Run cache cleanup on connect
@@ -806,21 +807,27 @@ class LookoutGalleryCard extends LitElement {
     this._visibilityHandler = this._handleVisibilityChange.bind(this);
     document.addEventListener('visibilitychange', this._visibilityHandler);
     
-    // Trigger queue check when reconnected (e.g., switching dashboards)
+    // Trigger thumbnail restoration when reconnected (e.g., switching dashboards)
     if (this._initLoaded && this.hass) {
       // Small delay to ensure DOM is ready
       setTimeout(() => {
+        // Restore blob URLs from _activeBlobUrls map back to items
+        this._reconnectBlobUrls();
         this._planQueueCheck();
-        // Also restore blob URLs in case they were invalidated
-        this._restoreBlobUrls();
-      }, 100);
+      }, 50);
     }
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this._stopAutoRefresh();
-    this._cleanup();
+    
+    // Don't cleanup blob URLs on disconnect - they stay valid and will be 
+    // restored from the _activeBlobUrls map when reconnected.
+    // Only cleanup processing state to prevent duplicate work.
+    this._processingSet.clear();
+    this._queueList = [];
+    this._activeWorkers = 0;
     
     // v1.2.3: Remove visibility handler
     if (this._visibilityHandler) {
@@ -833,6 +840,33 @@ class LookoutGalleryCard extends LitElement {
     if (document.visibilityState === 'visible') {
       console.log("[LookoutGallery] Tab visible again, checking thumbnails...");
       this._restoreBlobUrls();
+    }
+  }
+  
+  // Reconnect existing blob URLs from _activeBlobUrls map to items
+  // Used when card is reconnected after dashboard switch
+  _reconnectBlobUrls() {
+    if (!this._mediaEvents?.children) return;
+    
+    let reconnected = 0;
+    
+    for (const item of this._mediaEvents.children) {
+      if (item.can_expand) continue; // Skip folders
+      
+      const sourceItem = this._itemMap.get(item.media_content_id);
+      if (!sourceItem) continue;
+      
+      // Check if we have a stored blob URL
+      const storedUrl = this._activeBlobUrls.get(item.media_content_id);
+      if (storedUrl && !sourceItem.thumbnail_blob_url) {
+        sourceItem.thumbnail_blob_url = storedUrl;
+        reconnected++;
+      }
+    }
+    
+    if (reconnected > 0) {
+      console.log(`[LookoutGallery] Reconnected ${reconnected} blob URLs`);
+      this.requestUpdate();
     }
   }
   
