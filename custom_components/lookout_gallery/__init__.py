@@ -181,7 +181,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 def _get_generator(hass: HomeAssistant) -> ThumbnailGenerator | None:
     """Get the thumbnail generator instance."""
     for entry_data in hass.data.get(DOMAIN, {}).values():
-        if "generator" in entry_data:
+        # Skip non-dict values (like "frontend_loaded": True)
+        if isinstance(entry_data, dict) and "generator" in entry_data:
             return entry_data["generator"]
     return None
 
